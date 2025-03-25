@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ПИНАЙ ХУИ</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #gameCanvas {
+            display: block;
+            background-color: #87CEEB;
+            touch-action: none;
+            position: relative;
+        }
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .btn {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #score {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        #title {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.2);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="score">Ударов по хую: 0</div>
+    <div id="title">ВЛАД ПИНАЕТ ХУИ</div>
+    <div id="controls">
+        <div class="btn" id="leftBtn">←</div>
+        <div class="btn" id="rightBtn">→</div>
+        <div class="btn" id="upBtn">↑</div>
+        <div class="btn" id="downBtn">↓</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        
+        // Размеры canvas
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Игрок
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 30,
+            height: 50,
+            speed: 5,
+            dx: 0,
+            dy: 0,
+            color: '#000000'
+        };
+        
+        // Мяч
+        const ball = {
+            x: 0,
+            y: 0,
+            radius: 20,
+            imageSize: 40, // Размер отрисовки изображения
+            dx: 0,
+            dy: 0,
+            speed: 12,
+            isMoving: false
+        };
+
+        // Загрузка изображения мяча
+        const ballImage = new Image();
+        ballImage.src = 'images/ball.png'; // Путь к изображению
+        
+        // Размещаем мяч в случайном месте
+        function placeBallRandomly() {
+            ball.x = ball.radius + Math.random() * (canvas.width - ball.radius * 2);
+            ball.y = ball.radius + Math.random() * (canvas.height - ball.radius * 2);
+            
+            // Проверяем, чтобы мяч не появился внутри игрока
+            const minDistance = player.width + ball.radius * 2;
+            const dx = player.x - ball.x;
+            const dy = player.y - ball.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < minDistance) {
+                placeBallRandomly();
+            }
+        }
+        
+        let score = 0;
+        
+        // Рисуем игрока
+        function drawPlayer() {
+            // Голова
+            ctx.beginPath();
+            ctx.arc(player.x, player.y - 25, 15, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD700';
+            ctx.fill();
+            
+            // Туловище
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x - 15, player.y - 10, 30, 30);
+            
+            // Полоски на туловище
+            ctx.fillStyle = '#FFFFFF';
+            for (let i = 0; i < 3; i++) {
+                ctx.fillRect(player.x - 12, player.y - 5 + i * 8, 24, 3);
+            }
+            
+            // Ноги
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x - 12, player.y + 20, 10, 25); // Левая
+            ctx.fillRect(player.x + 2, player.y + 20, 10, 25);  // Правая
+            
+            // Руки
+            ctx.fillRect(player.x - 20, player.y, 10, 20);     // Левая
+            ctx.fillRect(player.x + 10, player.y, 10, 20);     // Правая
+        }
+        
+        // Рисуем мяч
+        function drawBall() {
+            if (ballImage.complete) { // Если изображение загружено
+                ctx.drawImage(
+                    ballImage,
+                    ball.x - ball.imageSize/2,
+                    ball.y - ball.imageSize/2,
+                    ball.imageSize,
+                    ball.imageSize
+                );
+            } else {
+                // Фолбэк - рисуем круг, если изображение не загрузилось
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.stroke();
+            }
+        }
+        
+        // Проверка столкновений с отталкиванием
+        function checkCollision() {
+            const dx = ball.x - player.x;
+            const dy = ball.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const minDistance = player.width/2 + ball.radius;
+            
+            if (distance < minDistance) {
+                // Вычисляем вектор отталкивания
+                const angle = Math.atan2(dy, dx);
+                const overlap = minDistance - distance;
+                
+                // Отталкиваем мяч
+                ball.x += Math.cos(angle) * overlap * 1.5;
+                ball.y += Math.sin(angle) * overlap * 1.5;
+                
+                // Задаем скорость мяча при столкновении
+                ball.dx = Math.cos(angle) * ball.speed;
+                ball.dy = Math.sin(angle) * ball.speed;
+                ball.isMoving = true;
+                
+                score++;
+                scoreElement.textContent = `Ударов: ${score}`;
+            }
+        }
+        
+        // Обновляем позиции
+        function update() {
+            // Двигаем игрока
+            player.x += player.dx;
+            player.y += player.dy;
+            
+            // Границы для игрока
+            if (player.x < 30) player.x = 30;
+            if (player.x > canvas.width - 30) player.x = canvas.width - 30;
+            if (player.y < 50) player.y = 50;
+            if (player.y > canvas.height - 50) player.y = canvas.height - 50;
+            
+            // Двигаем мяч
+            if (ball.isMoving) {
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                
+                // Отскок от стен
+                if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
+                    ball.dx = -ball.dx;
+                    ball.x = Math.max(ball.radius, Math.min(canvas.width - ball.radius, ball.x));
+                }
+                if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                    ball.dy = -ball.dy;
+                    ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
+                }
+                
+                // Замедление мяча
+                ball.dx *= 0.98;
+                ball.dy *= 0.98;
+                
+                // Остановка мяча при медленном движении
+                if (Math.abs(ball.dx) < 0.5 && Math.abs(ball.dy) < 0.5) {
+                    ball.isMoving = false;
+                    ball.dx = 0;
+                    ball.dy = 0;
+                    placeBallRandomly();
+                }
+            }
+            
+            // Проверяем столкновения
+            checkCollision();
+        }
+        
+        // Очищаем canvas
+        function clear() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Основной игровой цикл
+        function gameLoop() {
+            clear();
+            update();
+            drawPlayer();
+            drawBall();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Управление с кнопок
+        document.getElementById('leftBtn').addEventListener('touchstart', () => {
+            player.dx = -player.speed;
+        });
+        
+        document.getElementById('leftBtn').addEventListener('touchend', () => {
+            if (player.dx < 0) player.dx = 0;
+        });
+        
+        document.getElementById('rightBtn').addEventListener('touchstart', () => {
+            player.dx = player.speed;
+        });
+        
+        document.getElementById('rightBtn').addEventListener('touchend', () => {
+            if (player.dx > 0) player.dx = 0;
+        });
+        
+        document.getElementById('upBtn').addEventListener('touchstart', () => {
+            player.dy = -player.speed;
+        });
+        
+        document.getElementById('upBtn').addEventListener('touchend', () => {
+            if (player.dy < 0) player.dy = 0;
+        });
+        
+        document.getElementById('downBtn').addEventListener('touchstart', () => {
+            player.dy = player.speed;
+        });
+        
+        document.getElementById('downBtn').addEventListener('touchend', () => {
+            if (player.dy > 0) player.dy = 0;
+        });
+        
+        // Управление с клавиатуры для тестирования на ПК
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') player.dx = -player.speed;
+            else if (e.key === 'ArrowRight') player.dx = player.speed;
+            else if (e.key === 'ArrowUp') player.dy = -player.speed;
+            else if (e.key === 'ArrowDown') player.dy = player.speed;
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' && player.dx < 0) player.dx = 0;
+            else if (e.key === 'ArrowRight' && player.dx > 0) player.dx = 0;
+            else if (e.key === 'ArrowUp' && player.dy < 0) player.dy = 0;
+            else if (e.key === 'ArrowDown' && player.dy > 0) player.dy = 0;
+        });
+        
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            placeBallRandomly();
+        });
+        
+        // Инициализация игры
+        placeBallRandomly();
+        gameLoop();
+    </script>
+</body>
+</html>
